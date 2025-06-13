@@ -1,6 +1,6 @@
-import nonebot
 from nonebot import on_command
 from nonebot import require
+from nonebot.plugin import PluginMetadata
 
 require("nonebot_plugin_saa")
 
@@ -13,56 +13,61 @@ from PIL import Image, ImageDraw, ImageFont
 from pathlib import Path
 import io
 
+__plugin_meta__ = PluginMetadata(
+    name="喜（悲）报生成器",
+    description="生成喜报（或是悲报，管他呢）",
+    usage="/喜报 [文字] 生成喜报\n/悲报 [文字] 生成悲报",
+    type="application",
+    homepage="https://github.com/sp2dev/nonebot-plugin-xibao")
+
 font_path = Path(__file__).parent / "SourceHanSans.otf"
 
 
-async def gen_xibao(font_size=250, text=""):
-    xibao_path = Path(__file__).parent / "xibao_bg.png"
-    xibao = Image.open(xibao_path)
-    draw = ImageDraw.Draw(xibao)
+async def _generate_image(bg_file: str, text = "", font_size = 250, text_color = "black", stroke="") -> bytes:
+
+    img_path = Path(__file__).parent / bg_file
+    img = Image.open(img_path)
+    draw = ImageDraw.Draw(img)
     font = ImageFont.truetype(font_path, font_size)
+
     bbox = draw.textbbox((0, 0), text, font=font)
     text_width = bbox[2] - bbox[0]
     text_height = bbox[3] - bbox[1]
-    image_width, image_height = xibao.size
+    image_width, image_height = img.size
+
     x = (image_width - text_width) / 2 + font_size / 4
     y = (image_height - text_height) / 2 - font_size / 4
-    draw.text((x, y), text, fill="red", font=font)
-    xibao_bytes = io.BytesIO()
-    xibao.save(xibao_bytes,format='PNG')
-    return xibao_bytes.getvalue()
+
+    draw.text((x, y), text, fill=text_color, font=font, stroke_fill=stroke, stroke_width=10)
+    output = io.BytesIO()
+    img.save(output, format='PNG')
+    return output.getvalue()
 
 
-async def gen_beibao(font_size=250, text=""):
-    beibao_path = Path(__file__).parent / "beibao_bg.png"
-    beibao = Image.open(beibao_path)
-    draw = ImageDraw.Draw(beibao)
-    font = ImageFont.truetype(font_path, font_size)
-    bbox = draw.textbbox((0, 0), text, font=font)
-    text_width = bbox[2] - bbox[0]
-    text_height = bbox[3] - bbox[1]
-    image_width, image_height = beibao.size
-    x = (image_width - text_width) / 2 + font_size / 4
-    y = (image_height - text_height) / 2 - font_size / 4
-    draw.text((x, y), text, fill="black", font=font)
-    beibao_bytes = io.BytesIO()
-    beibao.save(beibao_bytes,format='PNG')
-    return beibao_bytes.getvalue()
+async def gen_xibao(font_size: int = 250, text: str = "") -> bytes:
+    return await _generate_image("xibao_bg.png", text, font_size, "red", stroke="yellow")
+
+async def gen_beibao(font_size: int = 250, text: str = "") -> bytes:
+    return await _generate_image("beibao_bg.png", text, font_size, "black", stroke="white")
 
 
-genxibao = on_command("喜报")
+genxibao = on_command("喜报", aliases={"喜报：", "喜报:"} )
 @genxibao.handle()
 async def xibaohandle(args:Message = CommandArg()):
     textinput = args.extract_plain_text()
-    size = int(250 - round(len(textinput)) * 10)
+    if len(textinput) > 25:
+        await genbeibao.finish("字数太多啦！长度应在 25 个字符以内")
+    size = 250 - len(textinput) * 10
     picdata = await gen_xibao(text = textinput, font_size=size)
     await saa.Image(picdata).send()
 
 
-genbeibao = on_command("悲报")
+genbeibao = on_command("悲报", aliases={"悲报：", "悲报:"} )
 @genbeibao.handle()
 async def beibaohandle(args:Message = CommandArg()):
     textinput = args.extract_plain_text()
-    size = int(250 - round(len(textinput)) * 10)
+    if len(textinput) > 25:
+        await genbeibao.finish("字数太多啦！长度应在 25 个字符以内")
+    size = 250 - len(textinput) * 10
     picdata = await gen_beibao(text = textinput, font_size=size)
     await saa.Image(picdata).send()

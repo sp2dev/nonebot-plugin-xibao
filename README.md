@@ -1,12 +1,18 @@
-# xibaobot
+# 喜（悲）报机器人
 
-## How to start
+## 安装
 
-1. generate project using `nb create` .
-2. create your plugin using `nb plugin create` .
-3. writing your plugins under `xibaobot/plugins` folder.
-4. run your bot using `nb run --reload` .
+```
+nb plugin install nonebot-plugin-xibao
+```
+```
+pip install nonebot-plugin-xibao
+```
 
-## Documentation
+## 使用
 
-See [Docs](https://nonebot.dev/)
+使用时记得加上前缀哦！
+| 命令 | 功能 |
+| --- | --- |
+| `喜报` | 生成一张喜报 |
+| `悲报` | 生成一张悲报 |
