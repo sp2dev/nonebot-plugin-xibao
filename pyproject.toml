@@ -10,3 +10,23 @@ dependencies = [
   "nonebot-plugin-saa>=0.1.0",
   "pillow>10.0.0"
 ]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+nonebot2 = "^2.3.1"
+
+[tool.poetry.dev-dependencies]
+python = "^3.11"
+nonebot2 = "^2.3.1"
+
+[tool.mypy]
+python_version = "3.9"
+ignore_missing_imports = true
+implicit_reexport = true
+pretty = true
+show_error_codes = true
+strict = true
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
