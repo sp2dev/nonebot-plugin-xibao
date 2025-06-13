@@ -11,4 +11,5 @@ dependencies = [
   "pillow>10.0.0"
 ]
 
-include = ["nonebot_plugin_xibao/SourceHanSans.otf"]
+[tool.setuptools.package-data]
+nonebot_plugin_xibao = ["SourceHanSans.otf"]
