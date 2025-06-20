@@ -57,7 +57,7 @@ async def xibaohandle(args:Message = CommandArg()):
     textinput = args.extract_plain_text()
     if len(textinput) > 25:
         await genbeibao.finish("字数太多啦！长度应在 25 个字符以内")
-    size = 250 - len(textinput) * 10
+    size = 250 - len(textinput) * 5
     picdata = await gen_xibao(text = textinput, font_size=size)
     await saa.Image(picdata).send()
 
@@ -68,6 +68,6 @@ async def beibaohandle(args:Message = CommandArg()):
     textinput = args.extract_plain_text()
     if len(textinput) > 25:
         await genbeibao.finish("字数太多啦！长度应在 25 个字符以内")
-    size = 250 - len(textinput) * 10
+    size = 250 - len(textinput) * 5
     picdata = await gen_beibao(text = textinput, font_size=size)
     await saa.Image(picdata).send()
