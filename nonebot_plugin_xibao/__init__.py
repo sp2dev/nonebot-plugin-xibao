@@ -18,7 +18,8 @@ __plugin_meta__ = PluginMetadata(
     description="生成喜报（或是悲报，管他呢）",
     usage="/喜报 [文字] 生成喜报\n/悲报 [文字] 生成悲报",
     type="application",
-    homepage="https://github.com/sp2dev/nonebot-plugin-xibao")
+    homepage="https://github.com/sp2dev/nonebot-plugin-xibao",
+        supported_adapters=saa.__plugin_meta__.supported_adapters)
 
 font_path = Path(__file__).parent / "SourceHanSans.otf"
 
