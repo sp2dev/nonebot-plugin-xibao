@@ -22,6 +22,7 @@ __plugin_meta__ = PluginMetadata(
     supported_adapters=inherit_supported_adapters(
         "nonebot_plugin_saa"
     )
+)
 
 font_path = Path(__file__).parent / "SourceHanSans.otf"
 
