@@ -1,6 +1,6 @@
 from nonebot import on_command
 from nonebot import require
-from nonebot.plugin import PluginMetadata
+from nonebot.plugin import PluginMetadata, inherit_supported_adapters
 
 require("nonebot_plugin_saa")
 
@@ -19,7 +19,9 @@ __plugin_meta__ = PluginMetadata(
     usage="/喜报 [文字] 生成喜报\n/悲报 [文字] 生成悲报",
     type="application",
     homepage="https://github.com/sp2dev/nonebot-plugin-xibao",
-        supported_adapters=saa.__plugin_meta__.supported_adapters)
+    supported_adapters=inherit_supported_adapters(
+        "nonebot_plugin_saa"
+    )
 
 font_path = Path(__file__).parent / "SourceHanSans.otf"
 
