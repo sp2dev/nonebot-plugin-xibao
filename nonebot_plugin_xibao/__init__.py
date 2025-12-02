@@ -55,7 +55,9 @@ async def gen_beibao(font_size: int = 250, text: str = "") -> bytes:
     return await _generate_image("beibao_bg.png", text, font_size, "black", stroke="white")
 
 
-genxibao = on_command("喜报", aliases={"喜报：", "喜报:"} )
+genxibao = on_command("喜报", aliases={"喜报：", "喜报:", "喜报。", "喜报.", "喜报，", "喜报,", 
+    "喜报！", "喜报!", "喜报？", "喜报?", "喜报；", "喜报;",
+    "喜报、", "喜报-", "喜报_", "喜报|", "喜报~", "喜报@"} )
 @genxibao.handle()
 async def xibaohandle(args:Message = CommandArg()):
     textinput = args.extract_plain_text()
@@ -71,7 +73,9 @@ async def xibaohandle(args:Message = CommandArg()):
     await saa.Image(picdata).send()
 
 
-genbeibao = on_command("悲报", aliases={"悲报：", "悲报:"} )
+genbeibao = on_command("悲报", aliases={"悲报：", "悲报:", "悲报。", "悲报.", "悲报，", "悲报,", 
+    "悲报！", "悲报!", "悲报？", "悲报?", "悲报；", "悲报;",
+    "悲报、", "悲报-", "悲报_", "悲报|", "悲报~", "悲报@"} )
 @genbeibao.handle()
 async def beibaohandle(args:Message = CommandArg()):
     textinput = args.extract_plain_text()
