@@ -24,7 +24,7 @@ __plugin_meta__ = PluginMetadata(
     )
 )
 
-font_path = Path(__file__).parent / "SourceHanSans.otf"
+font_path = Path(__file__).parent / "SourceHanSansSC-Regular.otf"
 
 
 def _wrap_text(text: str, chars_per_line: int = 10) -> list[str]:
