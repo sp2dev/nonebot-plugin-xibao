@@ -1,6 +1,6 @@
 [project]
 name = "nonebot-plugin-xibao"
-version = "1.1.0"
+version = "1.1.1"
 description = "生成一张喜报（或者是悲报）！"
 readme = "README.md"
 requires-python = ">=3.9, <4.0"
@@ -8,7 +8,8 @@ authors = [{ name = "sp2dev", email = "theinsp2@outlook.com" }]
 dependencies = [
   "nonebot2>=2.4.2,<3.0.0",
   "nonebot-plugin-send-anything-anywhere>=0.7.0",
-  "skia-python>=130.0"
+  "skia-python>=130.0",
+  "opencv-python-headless>=4.0"
 ]
 
 
