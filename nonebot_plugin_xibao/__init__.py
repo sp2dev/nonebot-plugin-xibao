@@ -11,6 +11,7 @@ from nonebot.adapters import Message
 from nonebot.params import CommandArg
 from PIL import Image, ImageDraw, ImageFont
 from pilmoji import Pilmoji
+from pilmoji.source import GoogleEmojiSource
 
 __plugin_meta__ = PluginMetadata(
     name="喜（悲）报生成器",
@@ -35,19 +36,21 @@ SAFE_MARGIN_BOTTOM = 0.08
 SAFE_MARGIN_LEFT = 0.10
 SAFE_MARGIN_RIGHT = 0.07
 
+# 自动字号与排版参数。
+# DEFAULT_FONT_SIZE：默认起始字号。
+# WRAP_TRIGGER_FONT_SIZE：字号降到该值以下时启用自动换行。
+# MIN_FONT_SIZE：继续缩小时的下限。
+# LINE_HEIGHT_FACTOR：行高 = 字号 * 因子。
+DEFAULT_FONT_SIZE = 160
+WRAP_TRIGGER_FONT_SIZE = 80
+MIN_FONT_SIZE = 30
+LINE_HEIGHT_FACTOR = 1
+STROKE_WIDTH = 10
+
 # 手动上下偏移（像素）：
 # 在自动垂直居中的基础上再做一次整体偏移。
 # 正数整体下移，负数整体上移，可用于快速微调视觉中心。
-TEXT_VERTICAL_OFFSET_PX = -60
-
-# 字号与排版参数。
-# MIN/MAX_FONT_SIZE：自动计算时允许的字号区间。
-# LINE_HEIGHT_FACTOR：行高 = 字号 * 因子，值越大行距越宽。
-# STROKE_WIDTH：描边宽度，参与文本测量与实际绘制，确保“测量尺寸”和“渲染尺寸”一致。
-MIN_FONT_SIZE = 30
-MAX_FONT_SIZE = 180
-LINE_HEIGHT_FACTOR = 1.3
-STROKE_WIDTH = 10
+TEXT_VERTICAL_OFFSET_PX = -70
 
 
 def _get_safe_rect(image_width: int, image_height: int) -> tuple[int, int, int, int]:
@@ -60,6 +63,10 @@ def _get_safe_rect(image_width: int, image_height: int) -> tuple[int, int, int, 
     top = int(image_height * SAFE_MARGIN_TOP)
     bottom = int(image_height * (1 - SAFE_MARGIN_BOTTOM))
     return left, top, right, bottom
+
+
+def _load_font(font_size: int) -> ImageFont.FreeTypeFont:
+    return ImageFont.truetype(font_path, font_size)
 
 
 def _measure_text(
@@ -88,6 +95,76 @@ def _measure_text(
 
     bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke_width)
     return int(bbox[2] - bbox[0]), int(bbox[3] - bbox[1])
+
+
+def _estimate_font_size(text: str, available_width: int) -> int:
+    """根据文本长度给出一个线性缩小的初始字号。
+
+    这个结果不是最终值，只用于让后续的精确拟合更快收敛。
+    """
+    visible_text = text.replace("\n", "")
+    if not visible_text:
+        return DEFAULT_FONT_SIZE
+
+    approximate_char_width = max(1, int(DEFAULT_FONT_SIZE * 0.92))
+    single_line_capacity = max(1, available_width // approximate_char_width)
+    shrink_ratio = min(1.0, len(visible_text) / single_line_capacity)
+    estimated = round(
+            DEFAULT_FONT_SIZE
+            - (DEFAULT_FONT_SIZE - WRAP_TRIGGER_FONT_SIZE) * shrink_ratio
+        )
+    return max(WRAP_TRIGGER_FONT_SIZE, min(DEFAULT_FONT_SIZE, estimated))
+
+
+def _line_height(font_size: int) -> int:
+    return max(1, int(font_size * LINE_HEIGHT_FACTOR))
+
+
+def _layout_lines(
+    text: str,
+    draw: ImageDraw.ImageDraw,
+    pilmoji: Pilmoji,
+    font: ImageFont.FreeTypeFont,
+    max_width: int,
+    wrap: bool,
+) -> list[str]:
+    if not text:
+        return []
+
+    lines: list[str] = []
+    for paragraph in text.split("\n"):
+        if wrap:
+            wrapped_lines = _wrap_text_by_width(
+                paragraph, draw, pilmoji, font, max_width
+            )
+            lines.extend(wrapped_lines or [""])
+        else:
+            lines.append(paragraph)
+
+    return lines
+
+
+def _layout_fits(
+    lines: list[str],
+    draw: ImageDraw.ImageDraw,
+    pilmoji: Pilmoji,
+    font: ImageFont.FreeTypeFont,
+    max_width: int,
+    max_height: int,
+) -> bool:
+    if not lines:
+        return True
+
+    total_height = _line_height(round(font.size)) * max(1, len(lines))
+    if total_height > max_height:
+        return False
+
+    for line in lines:
+        line_width, _ = _measure_text(line, draw, pilmoji, font, STROKE_WIDTH)
+        if line_width > max_width:
+            return False
+
+    return True
 
 
 def _wrap_text_by_width(
@@ -131,14 +208,14 @@ def _calculate_font_size(
     text: str,
     image_width: int,
     image_height: int,
-    max_font_size: int = MAX_FONT_SIZE,
+    max_font_size: int = DEFAULT_FONT_SIZE,
     min_font_size: int = MIN_FONT_SIZE,
 ) -> tuple[int, list[str]]:
-    """在安全区域内通过二分搜索寻找可容纳文本的最大字号。
+    """在安全区域内寻找最大可用字号。
 
-    返回 (font_size, wrapped_lines)：
-    - font_size：最终可用字号（尽可能大）。
-    - wrapped_lines：在该字号下按宽度换行后的文本行。
+    逻辑分两段：
+    1. 先按线性估算值从大到小寻找单行排版的最大可用字号；
+    2. 如果字号降到 80 以下仍然放不下，则切换为自动换行，再继续缩小。
     """
     if not text:
         return max_font_size, []
@@ -147,41 +224,47 @@ def _calculate_font_size(
     available_width = max(1, right - left)
     available_height = max(1, bottom - top)
 
-    # 测量专用画布：只用于计算尺寸，不参与最终输出。
     measure_img = Image.new("RGB", (1, 1))
     draw = ImageDraw.Draw(measure_img)
+
     with Pilmoji(measure_img) as pilmoji:
-        low, high = min_font_size, max_font_size
-        best_size = min_font_size
-        best_lines: list[str] = []
+        estimated_size = min(
+            max_font_size, _estimate_font_size(text, available_width)
+        )
 
-        while low <= high:
-            # 二分查找：尝试中间字号，能放下则继续放大，放不下则缩小。
-            mid = (low + high) // 2
-            font = ImageFont.truetype(font_path, mid)
-            lines = _wrap_text_by_width(
-                text, draw, pilmoji, font, available_width
-            )
-            line_height = max(1, int(mid * LINE_HEIGHT_FACTOR))
-            total_height = line_height * max(1, len(lines))
+        for font_size in range(estimated_size, WRAP_TRIGGER_FONT_SIZE - 1, -1):
+            font = _load_font(font_size)
+            lines = _layout_lines(text, draw, pilmoji, font, available_width, False)
+            if _layout_fits(
+                lines,
+                draw,
+                pilmoji,
+                font,
+                available_width,
+                available_height,
+            ):
+                return font_size, lines
 
-            if total_height <= available_height:
-                # 当前字号可用，记录为最优候选并尝试更大字号。
-                best_size = mid
-                best_lines = lines
-                low = mid + 1
-            else:
-                # 当前字号过大，缩小搜索区间。
-                high = mid - 1
+        wrapped_start = min(WRAP_TRIGGER_FONT_SIZE, estimated_size)
+        for font_size in range(wrapped_start, min_font_size - 1, -1):
+            font = _load_font(font_size)
+            lines = _layout_lines(text, draw, pilmoji, font, available_width, True)
+            if _layout_fits(
+                lines,
+                draw,
+                pilmoji,
+                font,
+                available_width,
+                available_height,
+            ):
+                return font_size, lines
 
-        if not best_lines:
-            # 理论上极端情况下可能没有可用解，降级到最小字号兜底。
-            fallback_font = ImageFont.truetype(font_path, min_font_size)
-            best_lines = _wrap_text_by_width(
-                text, draw, pilmoji, fallback_font, available_width
-            )
+        fallback_font = _load_font(min_font_size)
+        fallback_lines = _layout_lines(
+            text, draw, pilmoji, fallback_font, available_width, True
+        )
 
-    return best_size, best_lines
+    return min_font_size, fallback_lines
 
 
 async def _generate_image(
@@ -190,6 +273,7 @@ async def _generate_image(
     font_size: int | None = None,
     text_color: str = "black",
     stroke: str = "",
+    vertical_offset_px: int = TEXT_VERTICAL_OFFSET_PX,
 ) -> bytes:
     """通用图片生成流程：加载底图、排版文本、绘制并导出 JPEG。
 
@@ -198,57 +282,61 @@ async def _generate_image(
     - text: 要绘制的文本；为空时仅输出底图。
     - font_size: 可选的字号上限，不传时使用全局最大字号。
     - text_color/stroke: 文本颜色和描边颜色。
+    - vertical_offset_px: 手动上下偏移，用于微调视觉中心。
     """
     img_path = Path(__file__).parent / bg_file
-    img = Image.open(img_path)
-    image_width, image_height = img.size
+    with Image.open(img_path) as opened_img:
+        img = opened_img.convert("RGB")
+        image_width, image_height = img.size
 
-    if not text.strip():
-        # 无文本时直接返回底图，避免不必要的测量与绘制开销。
+        if not text.strip():
+            # 无文本时直接返回底图，避免不必要的测量与绘制开销。
+            output = io.BytesIO()
+            img.save(output, format="JPEG")
+            return output.getvalue()
+
+        left, top, right, bottom = _get_safe_rect(image_width, image_height)
+        available_width = max(1, right - left)
+        available_height = max(1, bottom - top)
+
+        # font_size 被视为“上限”而非固定值，最终仍会自动收缩以适应可用区域。
+        auto_max_font = font_size if font_size is not None else DEFAULT_FONT_SIZE
+        resolved_font_size, lines = _calculate_font_size(
+            text,
+            image_width,
+            image_height,
+            max_font_size=max(MIN_FONT_SIZE, auto_max_font),
+            min_font_size=MIN_FONT_SIZE,
+        )
+
+        draw = ImageDraw.Draw(img)
+        font = _load_font(resolved_font_size)
+        line_height = _line_height(resolved_font_size)
+        total_height = line_height * max(1, len(lines))
+        # 文字先在安全区域内垂直居中，再叠加手动上下偏移。
+        # 这样默认居中效果稳定，且保留可配置“视觉微调旋钮”。
+        start_y = top + (available_height - total_height) / 2 + vertical_offset_px
+
+        with Pilmoji(img,source=GoogleEmojiSource) as pilmoji:
+            for index, line in enumerate(lines):
+                line_width, _ = _measure_text(line, draw, pilmoji, font, STROKE_WIDTH)
+                # 每行单独水平居中，确保长短行混排时版心一致。
+                x = left + (available_width - line_width) / 2
+                y = start_y + index * line_height
+                pilmoji.text(
+                    (int(x), int(y)),
+                    line,
+                    spacing=0,
+                    fill=text_color,
+                    font=font,
+                    stroke_fill=stroke,
+                    stroke_width=STROKE_WIDTH,
+                    emoji_position_offset=(5, 0),
+                )
+
         output = io.BytesIO()
         img.save(output, format="JPEG")
         return output.getvalue()
-
-    left, top, right, bottom = _get_safe_rect(image_width, image_height)
-    available_width = max(1, right - left)
-    available_height = max(1, bottom - top)
-
-    # font_size 被视为“上限”而非固定值，最终仍会自动收缩以适应可用区域。
-    auto_max_font = font_size if font_size is not None else MAX_FONT_SIZE
-    resolved_font_size, lines = _calculate_font_size(
-        text,
-        image_width,
-        image_height,
-        max_font_size=max(MIN_FONT_SIZE, auto_max_font),
-        min_font_size=MIN_FONT_SIZE,
-    )
-
-    draw = ImageDraw.Draw(img)
-    font = ImageFont.truetype(font_path, resolved_font_size)
-    line_height = max(1, int(resolved_font_size * LINE_HEIGHT_FACTOR))
-    total_height = line_height * max(1, len(lines))
-    # 文字先在安全区域内垂直居中，再叠加手动上下偏移。
-    # 这样默认居中效果稳定，且保留可配置“视觉微调旋钮”。
-    start_y = top + (available_height - total_height) / 2 + TEXT_VERTICAL_OFFSET_PX
-
-    with Pilmoji(img) as pilmoji:
-        for i, line in enumerate(lines):
-            line_width, _ = _measure_text(line, draw, pilmoji, font, STROKE_WIDTH)
-            # 每行单独水平居中，确保长短行混排时版心一致。
-            x = left + (available_width - line_width) / 2
-            y = start_y + i * line_height
-            pilmoji.text(
-                (int(x), int(y)),
-                line,
-                fill=text_color,
-                font=font,
-                stroke_fill=stroke,
-                stroke_width=STROKE_WIDTH,
-            )
-
-    output = io.BytesIO()
-    img.save(output, format="JPEG")
-    return output.getvalue()
 
 
 async def gen_xibao(text: str = "", font_size: int | None = None) -> bytes:
