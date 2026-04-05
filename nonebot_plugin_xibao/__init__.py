@@ -50,7 +50,7 @@ STROKE_WIDTH = 10
 # 手动上下偏移（像素）：
 # 在自动垂直居中的基础上再做一次整体偏移。
 # 正数整体下移，负数整体上移，可用于快速微调视觉中心。
-TEXT_VERTICAL_OFFSET_PX = -70
+TEXT_VERTICAL_OFFSET_PX = -100
 
 
 def _get_safe_rect(image_width: int, image_height: int) -> tuple[int, int, int, int]:
@@ -106,7 +106,7 @@ def _estimate_font_size(text: str, available_width: int) -> int:
     if not visible_text:
         return DEFAULT_FONT_SIZE
 
-    approximate_char_width = max(1, int(DEFAULT_FONT_SIZE * 0.92))
+    approximate_char_width = max(1, int(DEFAULT_FONT_SIZE * 0.1))
     single_line_capacity = max(1, available_width // approximate_char_width)
     shrink_ratio = min(1.0, len(visible_text) / single_line_capacity)
     estimated = round(
